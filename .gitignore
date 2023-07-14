@@ -13,3 +13,4 @@ test/*
 *.egg-info
 *.egg-info/*
 .DS_Store
+env
