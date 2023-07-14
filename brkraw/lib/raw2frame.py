@@ -6,7 +6,7 @@ Created on Thu Feb  2 10:06:38 2023
 """
 
 from .utils import get_value, set_value
-import .recoFunctions
+from .recoFunctions import *
 import numpy as np
 
 def readBrukerRaw(fid_binary, acqp, meth):
@@ -282,7 +282,7 @@ def brkraw_Reco(kdata, reco, meth, recoparts = 'all'):
             for NR in range(N7):
                 for NI in range(N6):
                     for channel in range(N5):
-                        reco_result[:,:,:,:,channel,NI,NR] = recoFunctions.reco_qopts(kdata[:,:,:,:,channel,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
+                        reco_result[:,:,:,:,channel,NI,NR] = reco_qopts(kdata[:,:,:,:,channel,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
                         
          
         if 'phase_rotate' in recopart:
@@ -290,7 +290,7 @@ def brkraw_Reco(kdata, reco, meth, recoparts = 'all'):
                 for NI in range(N6):
                     for channel in range(N5):
                         #print(map_index[(NR+1)*(NI+1)-1])
-                        reco_result[:,:,:,:,channel,NI,NR] = recoFunctions.reco_phase_rotate(kdata[:,:,:,:,channel,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
+                        reco_result[:,:,:,:,channel,NI,NR] = reco_phase_rotate(kdata[:,:,:,:,channel,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
                        
         """ Need to look into if this case ever occurs"""
         if 'zero_filling' in recopart:
@@ -304,7 +304,7 @@ def brkraw_Reco(kdata, reco, meth, recoparts = 'all'):
             for NR in range(N7):
                 for NI in range(N6):
                     for chan in range(N5):
-                        newdata[:,:,:,:,chan,NI,NR] = recoFunctions.reco_zero_filling(reco_result[:,:,:,:,chan,NI,NR], reco, map_index[(NI+1)*(NR+1)-1], signal_position).reshape(newdata[:,:,:,:,chan,NI,NR].shape)
+                        newdata[:,:,:,:,chan,NI,NR] = reco_zero_filling(reco_result[:,:,:,:,chan,NI,NR], reco, map_index[(NI+1)*(NR+1)-1], signal_position).reshape(newdata[:,:,:,:,chan,NI,NR].shape)
         
             reco_result=newdata        
         
@@ -312,20 +312,20 @@ def brkraw_Reco(kdata, reco, meth, recoparts = 'all'):
             for NR in range(N7):
                 for NI in range(N6):
                     for chan in range(N5):
-                        reco_result[:,:,:,:,chan,NI,NR] = recoFunctions.reco_FT(reco_result[:,:,:,:,chan,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
+                        reco_result[:,:,:,:,chan,NI,NR] = reco_FT(reco_result[:,:,:,:,chan,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
         
         if 'image_rotate' in recopart:
             for NR in range(N7):
                 for NI in range(N6):
                     for chan in range(N5):
-                        reco_result[:,:,:,:,chan,NI,NR] = recoFunctions.reco_image_rotate(reco_result[:,:,:,:,chan,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
+                        reco_result[:,:,:,:,chan,NI,NR] = reco_image_rotate(reco_result[:,:,:,:,chan,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
         
         
         if 'phase_corr_pi' in recopart:
             for NR in range(N7):
                 for NI in range(N6):
                     for chan in range(N5):
-                        reco_result[:,:,:,:,chan,NI,NR] = recoFunctions.reco_phase_corr_pi(reco_result[:,:,:,:,chan,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
+                        reco_result[:,:,:,:,chan,NI,NR] = reco_phase_corr_pi(reco_result[:,:,:,:,chan,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
         
         if 'cutoff' in recopart: 
             newdata_dims=[1, 1, 1, 1]
@@ -337,7 +337,7 @@ def brkraw_Reco(kdata, reco, meth, recoparts = 'all'):
             for NR in range(N7):
                 for NI in range(N6):
                     for chan in range(N5):
-                        newdata[:,:,:,:,chan,NI,NR] = recoFunctions.reco_cutoff(reco_result[:,:,:,:,chan,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
+                        newdata[:,:,:,:,chan,NI,NR] = reco_cutoff(reco_result[:,:,:,:,chan,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
         
             reco_result=newdata
         
@@ -346,12 +346,12 @@ def brkraw_Reco(kdata, reco, meth, recoparts = 'all'):
             for NR in range(N7):
                 for NI in range(N6):
                     for chan in range(N5):
-                        reco_result[:,:,:,:,chan,NI,NR] = recoFunctions.reco_scale_phase_channels(reco_result[:,:,:,:,chan,NI,NR], reco, chan)
+                        reco_result[:,:,:,:,chan,NI,NR] = reco_scale_phase_channels(reco_result[:,:,:,:,chan,NI,NR], reco, chan)
          
         if 'sumOfSquares' in recopart:
             for NR in range(N7):
                 for NI in range(N6):
-                    reco_result[:,:,:,:,:1,NI,NR] = recoFunctions.reco_sumofsquares(reco_result[:,:,:,:,:,NI,NR], reco)
+                    reco_result[:,:,:,:,:1,NI,NR] = reco_sumofsquares(reco_result[:,:,:,:,:,NI,NR], reco)
             
             reco_result = reco_result[:,:,:,:,:1,:,:]
             reco_result = np.real(reco_result)
@@ -378,6 +378,6 @@ def brkraw_Reco(kdata, reco, meth, recoparts = 'all'):
                 for NR in range(N7):
                     for NI in range(N6):
                         for chan in range(N5):
-                            reco_result[:,:,:,:,chan,NI,NR] = recoFunctions.reco_transposition(reco_result[:,:,:,:,chan,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
+                            reco_result[:,:,:,:,chan,NI,NR] = reco_transposition(reco_result[:,:,:,:,chan,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
 
     return reco_result
