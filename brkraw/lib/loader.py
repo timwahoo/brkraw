@@ -289,6 +289,9 @@ class BrukerLoader():
 
     def get_acqp(self, scan_id):
         return self._acqp[scan_id]
+    
+    def get_reco(self, scan_id, reco_id):
+        return self._pvobj.get_reco(scan_id,reco_id)
 
     def get_bdata(self, scan_id):
         method = self.get_method(scan_id)
