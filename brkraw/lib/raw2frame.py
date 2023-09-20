@@ -24,11 +24,12 @@ def readBrukerRaw(fid_binary, acqp, meth):
     jobScanSize = get_value(acqp, 'ACQ_jobs')[0][0]
     dim1 = int(len(fid)/(jobScanSize*nRecs))
     
-    X = fid[::2] + 1j*fid[1::2] # Assume data is complex
+    # Assume data is complex
+    X = fid[::2] + 1j*fid[1::2] 
     
     # [num_lines, channel, scan_size]
     X = np.reshape(X, [dim1, nRecs, int(jobScanSize/2)])
-    #X = np.transpose(X, (1, 2, 0)).astype(np.complex64)
+    
     return X
 
 
@@ -52,7 +53,6 @@ def convertRawToFrame(data, acqp, meth):
     numSelectedRecievers= results.shape[-2]
     
     acqSizes = np.zeros(ACQ_dim)
-    #disp(get_value(acqp, 'ACQ_jobs'))
     scanSize = get_value(acqp, 'ACQ_jobs')[0][0]
     
     isSpatialDim = [i == 'Spatial' for i in get_value(acqp, 'ACQ_dim_desc')]
@@ -72,17 +72,9 @@ def convertRawToFrame(data, acqp, meth):
     else:  
         scanSize = acqSizes[0]
     
-    
-    # print("NR\tRem\t\tACQ_Phase\tNI\tReceiver\tScanSize\n"+
-    #     f'{int(NR)}\t{int(numresultsHighDim/ACQ_phase_factor)}\t\t\t{int(ACQ_phase_factor)}\t{int(NI)}\t{int(numSelectedRecievers)}\t\t\t{int(scanSize)}'
-    #     )
-    
-    # print(ACQ_obj_order)
-    
     # Resort
     if ACQ_dim>1:
         # [..., num_lines, channel, scan_size]
-        # Order is a guess, will need to adjust where int(ACQ_phase_factor) and NR go 
         results = results.transpose((1,2,0))
         
         results1 = results.reshape(
@@ -93,8 +85,8 @@ def convertRawToFrame(data, acqp, meth):
             int(numresultsHighDim/ACQ_phase_factor), 
             int(NR), order='F').copy()
         
-        
-        results2 = np.transpose(results1, (1, 2, 4, 0, 3, 5)) # => scansize, ACQ_phase_factor, numDataHighDim/ACQ_phase_factor, numSelectedReceivers, NI, NR
+        # reorder to [scansize, ACQ_phase_factor, numDataHighDim/ACQ_phase_factor, numSelectedReceivers, NI, NR]
+        results2 = np.transpose(results1, (1, 2, 4, 0, 3, 5)) 
     
         results3 =  results2.reshape( 
             int(scanSize), 
@@ -105,15 +97,6 @@ def convertRawToFrame(data, acqp, meth):
         
         frame = np.zeros_like(results3)
         frame[:,:,:,ACQ_obj_order,:] = results3 
-        
-        # Commented out (IDK if theres any use)
-        #if NI != len(ACQ_obj_order):
-        #    print('Size of ACQ_obj_order is not equal to NI: Data from unsupported method?')
-        
-        # We have a bug, Fortran vs C indexing
-        #if not np.log2(results.shape[0]).is_integer() or not np.log2(results.shape[1]).is_integer():
-        #    print('Current bug with any matrix that is not 2^n ')
-        
         
     else:
         # Havent encountered this situation yet
@@ -176,15 +159,13 @@ def convertFrameToCKData(frame, acqp, meth):
         PVM_EncZf = np.ones((ACQ_dim))
     
     # Resort
-    # use also method-parameters (encoding group)
     
     frameData = frame.copy()
     
-    # MGE with alternating k-space readout: Reverse every second
-    # scan. 
+    # MGE with alternating k-space readout: Reverse every second scan. 
     
     if get_value(meth, 'EchoAcqMode') != None and get_value(meth,'EchoAcqMode') == 'allEchoes':
-        print('Okay, Ill figure this out later')
+        raise 'Bug here 168'
         #frameData(:,:,:,2:2:end,:)=flipdim(data(:,:,:,2:2:end,:),1)
     
     
@@ -264,7 +245,7 @@ def brkraw_Reco(kdata, reco, meth, recoparts = 'all'):
     NINR=kdata.shape[5]*kdata.shape[6]
     signal_position=np.ones(shape=(dimnumber,1))*0.5;
     
-    # all transposition the same?
+    # Are all transposition the same?
     same_transposition = True
     RECO_transposition = get_value(reco, 'RECO_transposition')
 
@@ -289,10 +270,8 @@ def brkraw_Reco(kdata, reco, meth, recoparts = 'all'):
             for NR in range(N7):
                 for NI in range(N6):
                     for channel in range(N5):
-                        #print(map_index[(NR+1)*(NI+1)-1])
                         reco_result[:,:,:,:,channel,NI,NR] = reco_phase_rotate(kdata[:,:,:,:,channel,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
                        
-        """ Need to look into if this case ever occurs"""
         if 'zero_filling' in recopart:
             RECO_ft_size = get_value(reco,'RECO_ft_size')
             
@@ -361,7 +340,7 @@ def brkraw_Reco(kdata, reco, meth, recoparts = 'all'):
     
         if 'transposition' in recopart:
             if same_transposition:
-                # import variables:
+                # import variables
                 RECO_transposition = RECO_transposition[0]
                 # calculate additional variables:
             
@@ -372,7 +351,6 @@ def brkraw_Reco(kdata, reco, meth, recoparts = 'all'):
                     new_order = [0, 1, 2, 3]
                     new_order[int(ch_dim1)] = int(ch_dim2)
                     new_order[int(ch_dim2)] = int(ch_dim1)
-                    #print(new_order)
                     reco_result = reco_result.transpose(new_order + [4, 5, 6])
             else:
                 for NR in range(N7):

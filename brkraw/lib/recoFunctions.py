@@ -11,7 +11,7 @@ import numpy as np
 def reco_qopts(frame, Reco, actual_framenumber):
 
     # import variables
-    RECO_qopts = get_value(Reco, 'RECO_qopts') # RECO_qopts = Reco['RECO_qopts']
+    RECO_qopts = get_value(Reco, 'RECO_qopts') 
 
     # claculate additional parameters
     dims = [frame.shape[0], frame.shape[1], frame.shape[2], frame.shape[3]]
@@ -62,7 +62,6 @@ def reco_qopts(frame, Reco, actual_framenumber):
     return frame
 
     
-# if 'phase_rotate' in recopart:
 def reco_phase_rotate(frame, Reco, actual_framenumber):
     
     # import variables
@@ -115,33 +114,22 @@ def reco_phase_rotate(frame, Reco, actual_framenumber):
     frame *= phase_matrix
     return frame
 
-# if 'zero_fill' in recopart:
+
 def reco_zero_filling(frame, Reco, actual_framenumber, signal_position):
     # check input
-    """
-    if not ('RECO_ft_size' in Reco and isinstance(Reco['RECO_ft_size'], tuple)):
-        raise ValueError('RECO_ft_size is missing or has an invalid format')
-    """
     RECO_ft_mode = get_value(Reco,'RECO_ft_mode')
     
-    #print(frame.shape)
-    
-    # use function only if: Reco.RECO_ft_size is not equal to size(frame)
+    # Check if Reco.RECO_ft_size is not equal to size(frame)
     not_Equal = any([(i != j) for i,j in zip(frame.shape,get_value(Reco, 'RECO_ft_size'))])
         
     if not_Equal:
         if any(signal_position > 1) or any(signal_position < 0):
             raise ValueError('signal_position has to be a vector between 0 and 1')
 
-        # import variables:
         RECO_ft_size = get_value(Reco,'RECO_ft_size')
-        #print(RECO_ft_size)
 
         # check if ft_size is correct:
         for i in range(len(RECO_ft_size)):
-            
-            #if not np.log2(RECO_ft_size[i]).is_integer():
-            #    raise ValueError('RECO_ft_size has to be only of 2^n ')
             if RECO_ft_size[i] < frame.shape[i]:
                 raise ValueError('RECO_ft_size has to be bigger than the size of your data-matrix')
 
@@ -162,7 +150,6 @@ def reco_zero_filling(frame, Reco, actual_framenumber, signal_position):
                 if startpos[i] > RECO_ft_size[i]:
                     startpos[i] = RECO_ft_size[i]
                 pos_ges[i] = slice(startpos[i] - 1, startpos[i] - 1 + dims[i])
-            #print('a')
                 
             newframe[pos_ges[0], pos_ges[1], pos_ges[2], pos_ges[3]] = frame
         else:
@@ -175,7 +162,7 @@ def reco_zero_filling(frame, Reco, actual_framenumber, signal_position):
 
     return newframe
 
-# if 'FT' in recopart:
+
 def reco_FT(frame, Reco, actual_framenumber):
     """
     Perform Fourier Transform on the input frame according to the specified RECO_ft_mode in the Reco dictionary.
@@ -209,8 +196,6 @@ def reco_FT(frame, Reco, actual_framenumber):
     return frame
 
 
-
-# if 'phase_corr_pi' in recopart: Something wrong
 def reco_phase_corr_pi(frame, Reco, actual_framenumber):
     # start process
     checkerboard = np.ones(shape=frame.shape)
@@ -226,8 +211,7 @@ def reco_phase_corr_pi(frame, Reco, actual_framenumber):
     
     return frame
 
-
-# if 'cutoff' in recopart:  
+  
 def reco_cutoff(frame, Reco, actual_framenumber):
     """
     Crops the input frame according to the specified RECO_size in the Reco dictionary.
@@ -244,10 +228,8 @@ def reco_cutoff(frame, Reco, actual_framenumber):
     newframe: ndarray
         Cropped output frame
     """
-    # Check input
     
     # Use function only if Reco.RECO_size is not equal to size(frame)
-    #print(get_value(Reco,'RECO_size'), frame.shape)
     dim_equal = True
     for i,j in zip(get_value(Reco,'RECO_size'), frame.shape):
         dim_equal = (i==j)
@@ -270,7 +252,6 @@ def reco_cutoff(frame, Reco, actual_framenumber):
     return newframe
 
 
-# if 'scale_phase_channels' in recopart: 
 def reco_scale_phase_channels(frame, Reco, channel):
     # check input
     reco_scale = get_value(Reco,'RecoScaleChan')
@@ -282,7 +263,7 @@ def reco_scale_phase_channels(frame, Reco, channel):
         scale = 1.0
     
     reco_phase = get_value(Reco,'RecoPhaseChan')
-    #print(reco_phase)
+
     if not isinstance(reco_phase, list):
         reco_phase = [reco_phase]
     if channel <= len(reco_phase) and reco_phase != None:
@@ -295,16 +276,13 @@ def reco_scale_phase_channels(frame, Reco, channel):
     frame = spFactor * frame
     return frame
 
-# if 'sumOfSquares' in recopart:
+
 def reco_sumofsquares(frame, Reco): 
     out = np.sqrt( np.sum(np.square(np.abs(frame)), axis=4, keepdims=True) )
-    #print(out[1])
     return out
 
-# if 'transposition' in recopart:
+
 def reco_transposition(frame, Reco, actual_framenumber):
-    # Check input
-    
     # Import variables
     RECO_transposition = get_value(Reco,'RECO_transposition')[actual_framenumber - 1]
     
