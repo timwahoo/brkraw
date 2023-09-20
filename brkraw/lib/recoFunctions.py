@@ -243,7 +243,7 @@ def reco_cutoff(frame, Reco, actual_framenumber):
         # Cut the new part with RECO_size and RECO_offset
         pos_ges = []
         for i in range(len(RECO_size)):
-            # +1 because RECO_offset starts with 0
+
             pos_ges.append(slice(RECO_offset[i], RECO_offset[i] + RECO_size[i]))
         newframe = frame[tuple(pos_ges)]
     else:
