@@ -1,12 +1,45 @@
 # This docker file build a editable image.
 # You could directly edit the source code at `/home/brkraw to make changes. Or you could mount your brkraw code folder to /home/brkraw
 
-FROM python:3.11
+# HOW TO USE:
+# 1: BUILD IMAGE: run 'docker build - < Dockerfile.dev -t <IMAGE_NAME>'
+# 2: docker run -it -e DISPLAY=$DISPLAY     \
+#    -u=$(id -u $USER):$(id -g $USER)       \
+#    -v /tmp/.X11-unix:/tmp/.X11-unix:rw    \
+#    -v /<DATA_PATH>:/data
+#    --rm <IMAGE_NAME> brkraw <command>     
+
+FROM python:3.9
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    software-properties-common \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get install tk -y
+
+# INSTALL BRKRAW
 WORKDIR /home
 RUN mkdir ./brkraw
 WORKDIR /home/brkraw
-COPY . .
-RUN python -m pip install --editable /home/brkraw
+
+# COPY is not working currently
+# COPY . .
+
+# RUN git clone only clones files 
+# into current dir not into separte dir
+RUN git clone https://github.com/timwahoo/brkraw.git .
+RUN python -m pip install .
+
+# INSTALL BRKRAW-BART
+WORKDIR /home
+RUN mkdir ./brkraw-bart
+WORKDIR /home/brkraw-bart
+RUN git clone https://github.com/timwahoo/brkraw-bart.git .
+RUN python setup.py install
+
 RUN mkdir /data
 WORKDIR /data
 
