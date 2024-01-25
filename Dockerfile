@@ -1,5 +1,5 @@
 # How to use:
-# 1 BUILD IMAGE:   docker build - < Dockerfile -t <IMAGE_NAME>
+# 1 BUILD IMAGE:   docker build Dockerfile . -t <IMAGE_NAME>
 # 2 RUN CONTAINER: docker run -it --rm -v <your path to your data folder>:/data <IMAGE_NAME>
 
 FROM python:3.7
