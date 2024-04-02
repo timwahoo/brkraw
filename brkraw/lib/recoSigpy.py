@@ -7,8 +7,6 @@ Created on Sat Feb 08 2024
 
  THIS IS A WORK IN PROGRESS due to a lack of CS 
  datasets from PV360.3.3 or higher
-
-@author: Tim Ho (UVA) 
 """
 
 import sigpy as sp 

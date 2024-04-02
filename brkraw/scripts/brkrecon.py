@@ -111,7 +111,7 @@ def recon2nifti(pvobj, scan_id, reco_id, output, scanname, process):
     fid_binary = pvobj.get_fid(scan_id)
     acqp = pvobj.get_acqp(scan_id)
     reco = pvobj._pvobj.get_reco(scan_id, 1)
-    image = recon(fid_binary, acqp, method, reco, process = process,recoparts='default')
+    image = recon(fid_binary, acqp, method, reco, process = process)
 
     if len(image.shape) > 7:
         return

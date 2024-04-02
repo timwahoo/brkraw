@@ -3,14 +3,12 @@
  DEVELOPED FOR BRUKER PARAVISION 360 datasets
  Functions below are made to support functions
  in recon.py
-
-@author: Tim Ho (UVA) 
 """
 
 from .utils import get_value
 import numpy as np
 
-def reco_qopts(frame, Reco, actual_framenumber):
+def reco_qopts(frame, Reco):
 
     # import variables
     RECO_qopts = get_value(Reco, 'RECO_qopts') 
@@ -65,11 +63,10 @@ def reco_qopts(frame, Reco, actual_framenumber):
 
     
 def reco_phase_rotate(frame, Reco, actual_framenumber):
-    
     # import variables
-    RECO_rotate_all = get_value(Reco,'RECO_rotate')
+    RECO_rotate = get_value(Reco,'RECO_rotate')
     
-    if RECO_rotate_all.shape[1] > actual_framenumber:
+    if RECO_rotate.shape[1] > actual_framenumber:
         RECO_rotate =  get_value(Reco,'RECO_rotate')[:, actual_framenumber]
     else:
         RECO_rotate =  get_value(Reco,'RECO_rotate')[:,0]
@@ -89,14 +86,10 @@ def reco_phase_rotate(frame, Reco, actual_framenumber):
     for index in range(len(RECO_rotate)):
         f = np.arange(dims[index])
 
-        if RECO_ft_mode in ['COMPLEX_FT', 'COMPLEX_FFT']:
-            phase_vector = np.exp(1j*2*np.pi*RECO_rotate[index]*f)
-        elif RECO_ft_mode in ['NO_FT', 'NO_FFT']:
+        if RECO_ft_mode in ['NO_FT']:
             phase_vector = np.ones_like(f)
-        elif RECO_ft_mode in ['COMPLEX_IFT', 'COMPLEX_IFFT']:
+        elif RECO_ft_mode in ['COMPLEX_FT']:
             phase_vector = np.exp(1j*2*np.pi*(1-RECO_rotate[index])*f)
-        else:
-            raise ValueError('Your RECO_ft_mode is not supported')
 
         if index == 0:
             phase_matrix *= np.tile(phase_vector[:,np.newaxis,np.newaxis,np.newaxis], [1, dims[1], dims[2], dims[3]])
@@ -115,10 +108,8 @@ def reco_phase_rotate(frame, Reco, actual_framenumber):
     return frame
 
 
-def reco_zero_filling(frame, Reco, actual_framenumber, signal_position):
-    # check input
-    RECO_ft_mode = get_value(Reco,'RECO_ft_mode')
-    
+def reco_zero_filling(frame, Reco, signal_position):
+
     # Check if Reco.RECO_ft_size is not equal to size(frame)
     not_Equal = any([(i != j) for i,j in zip(frame.shape,get_value(Reco, 'RECO_ft_size'))])
         
@@ -163,142 +154,13 @@ def reco_zero_filling(frame, Reco, actual_framenumber, signal_position):
     return newframe
 
 
-def reco_FT(frame, Reco, actual_framenumber):
-    """
-    Perform Fourier Transform on the input frame according to the specified RECO_ft_mode in the Reco dictionary.
-    
-    Args:
-    frame: ndarray
-        Input frame to perform Fourier Transform on
-    Reco: dict
-        Dictionary containing the specified Fourier Transform mode (RECO_ft_mode)
-    actual_framenumber: int
-        Index of the current frame
-    
-    Returns:
-    frame: ndarray
-        Output frame after Fourier Transform has been applied
-    """
-    
-    # Import variables
-    RECO_ft_mode = get_value(Reco,'RECO_ft_mode')[0]
-    
-    # Start process
-    if RECO_ft_mode in ['COMPLEX_FT', 'COMPLEX_FFT']:
-        frame = np.fft.fftn(frame)
-        #frame = sp.fft(frame, axes=[0,1,2], center=False)
-    elif RECO_ft_mode in ['NO_FT', 'NO_FFT']:
-        pass
-    elif RECO_ft_mode in ['COMPLEX_IFT', 'COMPLEX_IFFT']:
-        frame = np.fft.ifftn(frame)
-        #frame = sp.ifft(frame, axes=[0,1,2], center=False)
-    else:
-        raise ValueError('Your RECO_ft_mode is not supported')
-        
-    return frame
-
-
-def reco_phase_corr_pi(frame, Reco, actual_framenumber):
+def reco_phase_corr_pi(frame):
     # start process
-    checkerboard = np.ones(shape=frame.shape)
-
+    checkerboard = np.ones(shape=frame.shape[:4])
     # Use NumPy broadcasting to alternate the signs
     checkerboard[::2,::2,::2,0] = -1
     checkerboard[1::2,1::2,::2,0] = -1
-    
     checkerboard[::2,1::2,1::2,0] = -1
     checkerboard[1::2,::2,1::2,0] = -1
-    
-    frame = frame * checkerboard * -1
-    
-    return frame
-
-  
-def reco_cutoff(frame, Reco, actual_framenumber):
-    """
-    Crops the input frame according to the specified RECO_size in the Reco dictionary.
-    
-    Args:
-    frame: ndarray
-        Input frame to crop
-    Reco: dict
-        Dictionary containing the specified crop size (RECO_size) and offset (RECO_offset)
-    actual_framenumber: int
-        Index of the current frame
-    
-    Returns:
-    newframe: ndarray
-        Cropped output frame
-    """
-    
-    # Use function only if Reco.RECO_size is not equal to size(frame)
-    dim_equal = True
-    for i,j in zip(get_value(Reco,'RECO_size'), frame.shape):
-        if i!=j:
-            dim_equal = False
-
-    if not dim_equal:      
-        # Import variables
-        RECO_offset = get_value(Reco,'RECO_offset')[:, actual_framenumber]
-        RECO_size = get_value(Reco, 'RECO_size')
-        
-        # Cut the new part with RECO_size and RECO_offset
-        pos_ges = []
-        for i in range(len(RECO_size)):
-            pos_ges.append(slice(RECO_offset[i], RECO_offset[i] + RECO_size[i]))
-        newframe = frame[tuple(pos_ges)]
-    
-    else:
-        newframe = frame
-    
-    return newframe
-
-
-def reco_scale_phase_channels(frame, Reco, channel):
-    # check input
-    reco_scale = get_value(Reco,'RecoScaleChan')
-    if not isinstance(reco_scale, list):
-        reco_scale = [reco_scale]
-    if channel <= len(reco_scale) and reco_scale != None:
-        scale = reco_scale[int(channel)]
-    else:
-        scale = 1.0
-    
-    reco_phase = get_value(Reco,'RecoPhaseChan')
-
-    if not isinstance(reco_phase, list):
-        reco_phase = [reco_phase]
-    if channel <= len(reco_phase) and reco_phase != None:
-        phase = reco_phase[int(channel)]
-    else:
-        phase = 0.0
-        
-    spFactor = scale * np.exp(1j * phase * np.pi / 180.0)
-    # multiply each pixel by common scale and phase factor
-    frame = spFactor * frame
-    return frame
-
-
-def reco_sumofsquares(frame, Reco): 
-    out = np.sqrt( np.sum(np.square(np.abs(frame)), axis=4, keepdims=True) )
-    return out
-
-
-def reco_transposition(frame, Reco, actual_framenumber):
-    # Import variables
-    RECO_transposition = get_value(Reco,'RECO_transposition')[actual_framenumber - 1]
-    
-    # Calculate additional variables
-    dims = [frame.shape[i] for i in range(4)]
-    
-    # Start process
-    if RECO_transposition > 0:
-        ch_dim1 = (RECO_transposition % 4)
-        ch_dim2 = RECO_transposition - 1
-        new_order = list(range(4))
-        new_order[int(ch_dim1)] = ch_dim2
-        new_order[int(ch_dim2)] = ch_dim1
-        frame = np.transpose(frame, new_order)
-        frame = np.reshape(frame, dims)
-    
-    return frame
+    checkerboard * -1
+    return checkerboard

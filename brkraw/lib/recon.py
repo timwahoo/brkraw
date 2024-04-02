@@ -6,7 +6,6 @@ Created on Sat Jan  20 10:06:38 2024
  GRE, MSME, RARE that were acquired with linear
  phase encoding
 
-@author: Tim Ho (UVA) 
 """
 
 from .utils import get_value, set_value
@@ -15,7 +14,7 @@ import numpy as np
 from copy import deepcopy
 
 
-def recon(fid_binary, acqp, meth, reco, process = 'image', recoparts = 'default'):
+def recon(fid_binary, acqp, meth, reco, process = 'image', recoparams = 'default'):
     """ Process FID -> Channel Sorted -> Frame-Sorted -> K-Sorted -> Image
     
     Parameters
@@ -30,12 +29,12 @@ def recon(fid_binary, acqp, meth, reco, process = 'image', recoparts = 'default'
 
     process: 'raw', 'frame', 'CKdata', 'image'
 
-    recoparts: 'default' or list()
+    recoparams: 'default' or list()
         List Options: ['quadrature', 'phase_rotate', 'zero_filling', 'FT', 'phase_corr_pi', 
                         'cutoff',  'scale_phase_channels', 'sumOfSquares', 'transposition']
         
         'default':
-            recoparts = ['quadrature', 'phase_rotate', 'zero_filling', 
+            recoparams = ['quadrature', 'phase_rotate', 'zero_filling', 
                         'FT', 'phase_corr_pi']
 
     Returns
@@ -77,7 +76,7 @@ def recon(fid_binary, acqp, meth, reco, process = 'image', recoparts = 'default'
         if process == 'CKdata':
             return output
         
-        output = brkraw_Reco(output, deepcopy(reco), meth, recoparts = recoparts)
+        output = brkraw_Reco(output, deepcopy(reco), meth, recoparams = recoparams)
     
     else:
         print("Warning: SEQUENCE PROTOCOL {} NOT SUPPORTED...".format(get_value(acqp, 'ACQ_scan_name' )))
@@ -102,7 +101,6 @@ def readBrukerRaw(fid_binary, acqp, meth):
     -------
     X : np.array [num_lines, channel, scan_size]
     """
-    from .reference import BYTEORDER, WORDTYPE
     # META DATA
     NI = get_value(acqp, 'NI')
     NR = get_value(acqp, 'NR')
@@ -134,13 +132,13 @@ def readBrukerRaw(fid_binary, acqp, meth):
         numDataHighDim = np.prod(ACQ_size)
         nRecs = get_value(acqp, 'ACQ_ReceiverSelectPerChan').count('Yes')
         
-        jobScanSize = get_value(acqp, 'ACQ_jobs')[0][0]
+        scanSize = get_value(acqp, 'ACQ_jobs')[0][0]
         
         # Assume data is complex
         X = fid[::2] + 1j*fid[1::2] 
         
         # [num_lines, channel, scan_size]
-        X = np.reshape(X, [-1, nRecs, int(jobScanSize/2)])
+        X = np.reshape(X, [-1, nRecs, int(scanSize/2)])
 
     else:
         # METAdata Versions Before 360        
@@ -191,87 +189,54 @@ def convertRawToFrame(data, acqp, meth):
     Returns
     -------
     frame : np.array with size 
-        [scansize, ACQ_phase_factor, numDataHighDim/ACQ_phase_factor, numSelectedReceivers, NI, NR]
+        [scansize, ACQ_phase_factor, numDataHighDim/ACQ_phase_factor, NC, NI, NR]
     """ 
- 
+    ACQ_dim = get_value(acqp, 'ACQ_dim')
+    if ACQ_dim<=1:
+        raise Exception('Method is Spectroscopy or unknown dim')
+    
     results = data.copy()
      
     # Metadata
     NI = get_value(acqp, 'NI')
     NR = get_value(acqp, 'NR')
+    NC = data.shape[-2]
     
-    if 'rare' in get_value(meth,'Method').lower():
-        ACQ_phase_factor    = get_value(meth,'PVM_RareFactor')    
+    ACQ_phase_factor = get_value(meth,'PVM_RareFactor') if 'rare' in get_value(meth,'Method').lower() else get_value(acqp,'ACQ_phase_factor')
+    ACQ_obj_order = [get_value(acqp, 'ACQ_obj_order')] if isinstance(get_value(acqp, 'ACQ_obj_order'), int) else get_value(acqp, 'ACQ_obj_order')
+    Nreadout = get_value(acqp,'ACQ_size')[0] if get_value(acqp, 'ACQ_jobs')[0][0] == 0 else get_value(acqp, 'ACQ_jobs')[0][0] 
+    
+    dimSizes = np.zeros(ACQ_dim)
+    if ACQ_dim == 3:
+        dimSizes[1:] = get_value(meth, 'PVM_EncMatrix')[1:]
     else:
-        ACQ_phase_factor    = get_value(acqp,'ACQ_phase_factor')
-    
-    ACQ_obj_order       = get_value(acqp, 'ACQ_obj_order')
-    if isinstance(ACQ_obj_order, int):
-        ACQ_obj_order = [ACQ_obj_order]
-    
-    ACQ_dim             = get_value(acqp, 'ACQ_dim')
-    numSelectedRecievers= results.shape[-2]
-    
-    acqSizes = np.zeros(ACQ_dim)
-    scanSize = get_value(acqp, 'ACQ_jobs')[0][0]
+        dimSizes[1] = get_value(meth, 'PVM_EncMatrix')[1]
+    Npe=np.prod(dimSizes[1:])
+    dimSizes[0] = int(Nreadout/2)   
 
-    if scanSize == 0:
-        scanSize = get_value(acqp,'ACQ_size')[0]
+    # [num_readout, channel, scan_size] -> [channel, scan_size, num_readout]
+    results = results.transpose((1,2,0))
     
-    isSpatialDim = [i == 'Spatial' for i in get_value(acqp, 'ACQ_dim_desc')]
-    spatialDims = sum(isSpatialDim)
+    results = results.reshape(
+        int(NC), 
+        int(dimSizes[0]), 
+        int(ACQ_phase_factor), 
+        int(NI), 
+        int(Npe/ACQ_phase_factor), 
+        int(NR), order='F')
     
-    if isSpatialDim[0]:
-        if spatialDims == 3:
-            acqSizes[1:] = get_value(meth, 'PVM_EncMatrix')[1:]
-        elif spatialDims == 2:
-            acqSizes[1]  = get_value(meth, 'PVM_EncMatrix')[1]
-    
-    numresultsHighDim=np.prod(acqSizes[1:])
-    acqSizes[0] = scanSize   
+    # reorder to [scansize, ACQ_phase_factor, numDataHighDim/ACQ_phase_factor, NC, NI, NR]
+    results = np.transpose(results, (1, 2, 4, 0, 3, 5)) 
 
-    if np.iscomplexobj(results):
-        scanSize = int(acqSizes[0]/2)
-    else:  
-        scanSize = acqSizes[0]
+    results =  results.reshape( 
+        int(dimSizes[0]), 
+        int(Npe), 
+        int(NC), 
+        int(NI), 
+        int(NR), order='F') 
     
-    # Start Resort based on 
-    if ACQ_dim>1:
-        # [num_readout, channel, scan_size] -> [channel, scan_size, num_readout]
-        results = results.transpose((1,2,0))
-        
-        results = results.reshape(
-            int(numSelectedRecievers), 
-            int(scanSize), 
-            int(ACQ_phase_factor), 
-            int(NI), 
-            int(numresultsHighDim/ACQ_phase_factor), 
-            int(NR), order='F')
-        
-        # reorder to [scansize, ACQ_phase_factor, numDataHighDim/ACQ_phase_factor, numSelectedReceivers, NI, NR]
-        results = np.transpose(results, (1, 2, 4, 0, 3, 5)) 
-    
-        results =  results.reshape( 
-            int(scanSize), 
-            int(numresultsHighDim), 
-            int(numSelectedRecievers), 
-            int(NI), 
-            int(NR), order='F') 
-        
-        frame = np.zeros_like(results)
-        frame[:,:,:,ACQ_obj_order,:] = results 
-        
-    else:
-        # ACQ = 1, Method is a Spectroscopy
-        # Havent encountered this situation yet
-        # Leaving code in just in case
-        '''
-        results = np.reshape(results,(numSelectedRecievers, scanSize,1,NI,NR), order='F')
-        return_out = np.zeros_like(results)
-        return_out = np.transpose(results, (1, 2, 0, 3, 4))
-        frame = return_out
-        '''
-        raise Exception('Bug here 120')
+    frame = np.zeros_like(results)
+    frame[:,:,:,ACQ_obj_order,:] = results 
         
     return frame
 
@@ -290,7 +255,7 @@ def convertFrameToCKData(frame, acqp, meth):
     Returns
     -------
     data : np.array with size 
-        [scansize, ACQ_phase_factor, numDataHighDim/ACQ_phase_factor, numSelectedReceivers, NI, NR]
+        [scansize, ACQ_phase_factor, numDataHighDim/ACQ_phase_factor, NC, NI, NR]
         for simplified understanding of the data structure
         [x,y,z,_,n_channel,NI,NR]
     """
@@ -298,10 +263,8 @@ def convertFrameToCKData(frame, acqp, meth):
     NI = get_value(acqp, 'NI')
     NR = get_value(acqp, 'NR')
     
-    ACQ_phase_factor    = get_value(acqp,'ACQ_phase_factor')
-    ACQ_obj_order       = get_value(acqp, 'ACQ_obj_order')
     ACQ_dim             = get_value(acqp, 'ACQ_dim')
-    numSelectedReceivers= frame.shape[2]
+    NC= frame.shape[2]
     
     acqSizes = np.zeros(ACQ_dim)   
     scanSize = get_value(acqp, 'ACQ_jobs')[0][0]
@@ -327,7 +290,6 @@ def convertFrameToCKData(frame, acqp, meth):
         scanSize = acqSizes[0]
     
     if ACQ_dim==3:
-       
         PVM_EncSteps2=get_value(meth, 'PVM_EncSteps2')
         assert PVM_EncSteps2 != None
            
@@ -366,19 +328,19 @@ def convertFrameToCKData(frame, acqp, meth):
 
     # Reshape & store based on dimension
     if ACQ_dim == 1:
-        frameData = np.reshape(frameData,(scanSize, 1, 1, 1, numSelectedReceivers, NI, NR) , order='F')
-        data = np.zeros((ckSize[0], 1, 1, 1, numSelectedReceivers, NI, NR), dtype=complex)
+        frameData = np.reshape(frameData,(scanSize, 1, 1, 1, NC, NI, NR) , order='F')
+        data = np.zeros((ckSize[0], 1, 1, 1, NC, NI, NR), dtype=complex)
         data[readStartIndex-1:,0,0,0,:,:,:] = frameData
 
     elif ACQ_dim == 2: 
-        frameData=np.reshape(frameData,(scanSize, int(ACQ_size[1]), 1, 1, numSelectedReceivers, NI, NR) , order='F')
-        data=np.zeros([int(ckSize[0]), int(ckSize[1]), 1, 1, numSelectedReceivers, NI, NR], dtype=complex)
+        frameData=np.reshape(frameData,(scanSize, int(ACQ_size[1]), 1, 1, NC, NI, NR) , order='F')
+        data=np.zeros([int(ckSize[0]), int(ckSize[1]), 1, 1, NC, NI, NR], dtype=complex)
         encSteps1indices = (PVM_EncSteps1 + ckCenterIndex[1] - 1).astype(int)
         data[readStartIndex-1:,encSteps1indices,0,0,:,:,:] = frameData.reshape(data[readStartIndex-1:,encSteps1indices,0,0,:,:,:].shape, order='F')               
     
     elif ACQ_dim == 3:
-        frameData = np.reshape(frameData,(scanSize, int(ACQ_size[1]), int(ACQ_size[2]), 1, numSelectedReceivers, NI, NR) , order='F')
-        data=np.zeros([int(ckSize[0]), int(ckSize[1]), int(ckSize[2]), 1, numSelectedReceivers, NI, NR], dtype=complex)
+        frameData = np.reshape(frameData,(scanSize, int(ACQ_size[1]), int(ACQ_size[2]), 1, NC, NI, NR) , order='F')
+        data=np.zeros([int(ckSize[0]), int(ckSize[1]), int(ckSize[2]), 1, NC, NI, NR], dtype=complex)
         encSteps1indices = (PVM_EncSteps1 + ckCenterIndex[1] - 1).astype(int)
         encSteps2indices = (PVM_EncSteps2 + ckCenterIndex[2] - 1).astype(int)
         
@@ -390,27 +352,12 @@ def convertFrameToCKData(frame, acqp, meth):
     return data
 
 
-def brkraw_Reco(kdata, reco, meth, recoparts = 'all'):
+def brkraw_Reco(kdata, reco, meth, recoparams = 'default'):
     reco_result = kdata.copy()
         
-    if recoparts == 'all':
-        recoparts = ['quadrature', 'phase_rotate', 'zero_filling', 'FT', 'phase_corr_pi', 
-                     'cutoff',  'scale_phase_channels', 'sumOfSquares', 'transposition']
-    elif recoparts == 'default':
-        recoparts = ['quadrature', 'phase_rotate', 'zero_filling', 
+    if recoparams == 'default':
+        recoparams = ['phase_rotate', 'zero_filling', 
                      'FT', 'phase_corr_pi']
-    # Metadata
-    RECO_ft_mode = get_value(reco, 'RECO_ft_mode')  
-    
-    # Adapt FT convention to acquisition version.
-    reco_ft_mode_new = []
-    for i in RECO_ft_mode:
-        if i == 'COMPLEX_FT' or i == 'COMPLEX_FFT':
-            reco_ft_mode_new.append('COMPLEX_IFT')
-        else:
-            reco_ft_mode_new.append('COMPLEX_FT')           
-    reco = set_value(reco, 'RECO_ft_mode', reco_ft_mode_new)
-    RECO_ft_mode = get_value(reco, 'RECO_ft_mode')
     
     # DIMS
     N1, N2, N3, N4, N5, N6, N7 = kdata.shape
@@ -419,113 +366,36 @@ def brkraw_Reco(kdata, reco, meth, recoparts = 'all'):
     for i in range(4):
         if dims[i]>1:
             dimnumber = (i+1)
-        
-    NINR=kdata.shape[5]*kdata.shape[6]
-    signal_position=np.ones(shape=(dimnumber,1))*0.5
     
-    same_transposition = True
-    RECO_transposition = get_value(reco, 'RECO_transposition')
-
-    if not isinstance(RECO_transposition, list):
-        RECO_transposition = [RECO_transposition]
-    for i in RECO_transposition:
-        if i != RECO_transposition[0]:
-            same_transposition = False
+    signal_position=np.ones(shape=(dimnumber,1))*0.5
     
     map_index= np.reshape( np.arange(0,kdata.shape[5]*kdata.shape[6]), (kdata.shape[6], kdata.shape[5]) ).flatten()
     
     # --- START RECONSTRUCTION ---
-    for recopart in recoparts:
-
-        if 'quadrature' in recopart:
-            for NR in range(N7):
-                for NI in range(N6):
-                    for channel in range(N5):
-                        reco_result[:,:,:,:,channel,NI,NR] = reco_qopts(kdata[:,:,:,:,channel,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
-                         
-         
-        if 'phase_rotate' in recopart:
-            for NR in range(N7):
-                for NI in range(N6):
-                    for channel in range(N5):
-                        reco_result[:,:,:,:,channel,NI,NR] = reco_phase_rotate(kdata[:,:,:,:,channel,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
-          
-
-        if 'zero_filling' in recopart:
-            RECO_ft_size = get_value(reco,'RECO_ft_size')
-            
-            newdata_dims=[1, 1, 1, 1]
-
-            newdata_dims[0:len(RECO_ft_size)] = RECO_ft_size
-            newdata = np.zeros(shape=newdata_dims+[N5, N6, N7], dtype=np.complex128)
-
-            for NR in range(N7):
-                for NI in range(N6):
-                    for chan in range(N5):
-                        newdata[:,:,:,:,chan,NI,NR] = reco_zero_filling(reco_result[:,:,:,:,chan,NI,NR], reco, map_index[(NI+1)*(NR+1)-1], signal_position).reshape(newdata[:,:,:,:,chan,NI,NR].shape)
+                  
+    if 'phase_rotate' in recoparams:
+        for NR in range(N7):
+            for NI in range(N6):
+                for channel in range(N5):
+                    reco_result[:,:,:,:,channel,NI,NR] = reco_phase_rotate(kdata[:,:,:,:,channel,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
         
-            reco_result=newdata    
+    if 'zero_filling' in recoparams:
+        newdata_dims=[1, 1, 1, 1]
+        RECO_ft_size = get_value(reco,'RECO_ft_size')
+        newdata_dims[0:len(RECO_ft_size)] = RECO_ft_size
+        newdata = np.zeros(shape=newdata_dims+[N5, N6, N7], dtype=np.complex128)
 
-        
-        if 'FT' in recopart:
-            RECO_ft_mode = get_value(reco,'RECO_ft_mode')[0]
-            for NR in range(N7):
-                for NI in range(N6):
-                    for chan in range(N5):
-                        reco_result[:,:,:,:,chan,NI,NR] = reco_FT(reco_result[:,:,:,:,chan,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
+        for NR in range(N7):
+            for NI in range(N6):
+                for chan in range(N5):
+                    newdata[:,:,:,:,chan,NI,NR] = reco_zero_filling(reco_result[:,:,:,:,chan,NI,NR], reco, signal_position).reshape(newdata[:,:,:,:,chan,NI,NR].shape)
+        reco_result=newdata    
 
+    # Always FT and Phase correct
+    reco_result = np.fft.ifftn(reco_result, axes=(0,1,2,3))
+    reco_result *= np.tile(reco_phase_corr_pi(reco_result)[:,:,:,:,np.newaxis,np.newaxis,np.newaxis],
+                                                  [1,1,1,1,N5,N6,N7])
 
-        if 'phase_corr_pi' in recopart:
-            for NR in range(N7):
-                for NI in range(N6):
-                    for chan in range(N5):
-                        reco_result[:,:,:,:,chan,NI,NR] = reco_phase_corr_pi(reco_result[:,:,:,:,chan,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
-        
-        if 'cutoff' in recopart: 
-            newdata_dims=[1, 1, 1, 1]
-            reco_size = get_value(reco, 'RECO_size')
-            newdata_dims[0:len(reco_size)] = reco_size
-            newdata = np.zeros(shape=newdata_dims+[N5, N6, N7], dtype=np.complex128)
-            for NR in range(N7):
-                for NI in range(N6):
-                    for chan in range(N5):
-                        newdata[:,:,:,:,chan,NI,NR] = reco_cutoff(reco_result[:,:,:,:,chan,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
-        
-            reco_result=newdata
-
-        if 'scale_phase_channels' in recopart: 
-            for NR in range(N7):
-                for NI in range(N6):
-                    for chan in range(N5):
-                        reco_result[:,:,:,:,chan,NI,NR] = reco_scale_phase_channels(reco_result[:,:,:,:,chan,NI,NR], reco, chan)
-        
-        
-        if 'sumOfSquares' in recopart:
-            reco_result = np.sqrt( np.sum(np.square(np.abs(reco_result)), axis=4, keepdims=True))
-            reco_result = reco_result[:,:,:,:,:1,:,:]
-            reco_result = np.real(reco_result)
-            
-            N5 = 1 # Update N5
-    
-        if 'transposition' in recopart:
-            if same_transposition:
-                # import variables
-                RECO_transposition = RECO_transposition[0]
-                # calculate additional variables:
-            
-                # start process
-                if RECO_transposition > 0:
-                    ch_dim1 = (RECO_transposition % len(kdata.shape)) 
-                    ch_dim2 = RECO_transposition - 1 
-                    new_order = [0, 1, 2, 3]
-                    new_order[int(ch_dim1)] = int(ch_dim2)
-                    new_order[int(ch_dim2)] = int(ch_dim1)
-                    reco_result = reco_result.transpose(new_order + [4, 5, 6])
-            else:
-                for NR in range(N7):
-                    for NI in range(N6):
-                        for chan in range(N5):
-                            reco_result[:,:,:,:,chan,NI,NR] = reco_transposition(reco_result[:,:,:,:,chan,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
-    # --- End of RECONSTRUCTION Loop --- 
+    # --- End of RECONSTRUCTION --- 
                             
     return reco_result
