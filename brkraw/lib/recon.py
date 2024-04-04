@@ -68,15 +68,11 @@ def recon(fid_binary, acqp, meth, reco, process = 'image', recoparams = 'default
             return output
 
         # Full Cartesian Pipeline
-        output = convertRawToFrame(output, acqp, meth)
-        if process == 'frame':
+        output = convertRawToKdata(output, acqp, meth)
+        if process == 'kdata':
             return output
-        
-        output = convertFrameToCKData(output, acqp, meth)
-        if process == 'CKdata':
-            return output
-        
-        output = brkraw_Reco(output, deepcopy(reco), meth, recoparams = recoparams)
+
+        output = brkrawReco(output, deepcopy(reco), meth, recoparams = recoparams)
     
     else:
         print("Warning: SEQUENCE PROTOCOL {} NOT SUPPORTED...".format(get_value(acqp, 'ACQ_scan_name' )))
@@ -129,9 +125,7 @@ def readBrukerRaw(fid_binary, acqp, meth):
     if '360' in get_value(acqp,'ACQ_sw_version'):
         # METAdata for 360
         ACQ_size = get_value(acqp, 'ACQ_jobs')[0][0]
-        numDataHighDim = np.prod(ACQ_size)
         nRecs = get_value(acqp, 'ACQ_ReceiverSelectPerChan').count('Yes')
-        
         scanSize = get_value(acqp, 'ACQ_jobs')[0][0]
         
         # Assume data is complex
@@ -142,13 +136,9 @@ def readBrukerRaw(fid_binary, acqp, meth):
 
     else:
         # METAdata Versions Before 360        
-        nRecs = 1 # PV7 only save 1 channel
-        if get_value(acqp, 'ACQ_ReceiverSelect') != None:
-            nRecs = get_value(acqp, 'ACQ_ReceiverSelect').count('Yes')
-            
-        ACQ_size = get_value(acqp, 'ACQ_size' )
-        if type(ACQ_size) == int:
-            ACQ_size = [ACQ_size] 
+        # PV7 only save 1 channel
+        nRecs = get_value(acqp, 'ACQ_ReceiverSelect').count('Yes') if get_value(acqp, 'ACQ_ReceiverSelect') != None else 1
+        ACQ_size = [get_value(acqp, 'ACQ_size')] if isinstance(get_value(acqp, 'ACQ_size'),int) else get_value(acqp, 'ACQ_size')
 
         if get_value(acqp, 'GO_block_size') == 'Standard_KBlock_Format':
             blocksize = int(np.ceil(ACQ_size[0]*nRecs*(bits/8)/1024)*1024/(bits/8))
@@ -174,206 +164,61 @@ def readBrukerRaw(fid_binary, acqp, meth):
          
     return X
 
+def convertRawToKdata(raw, acqp, meth):
+    _, NC, Nreadout = raw.shape
 
-def convertRawToFrame(data, acqp, meth):
-    """ Prelinary raw fid sorting
-
-    Parameters
-    ----------
-    data : np.array with size [num_readouts, channel, scan_size]
-
-    acqp : dict (brkraw Parameter structure)
-
-    meth : dict (brkraw Parameter structure)
-
-    Returns
-    -------
-    frame : np.array with size 
-        [scansize, ACQ_phase_factor, numDataHighDim/ACQ_phase_factor, NC, NI, NR]
-    """ 
+    # Meta data
     ACQ_dim = get_value(acqp, 'ACQ_dim')
-    if ACQ_dim<=1:
-        raise Exception('Method is Spectroscopy or unknown dim')
-    
-    results = data.copy()
-     
-    # Metadata
     NI = get_value(acqp, 'NI')
     NR = get_value(acqp, 'NR')
-    NC = data.shape[-2]
-    
-    ACQ_phase_factor = get_value(meth,'PVM_RareFactor') if 'rare' in get_value(meth,'Method').lower() else get_value(acqp,'ACQ_phase_factor')
     ACQ_obj_order = [get_value(acqp, 'ACQ_obj_order')] if isinstance(get_value(acqp, 'ACQ_obj_order'), int) else get_value(acqp, 'ACQ_obj_order')
-    Nreadout = get_value(acqp,'ACQ_size')[0] if get_value(acqp, 'ACQ_jobs')[0][0] == 0 else get_value(acqp, 'ACQ_jobs')[0][0] 
-    
-    dimSizes = np.zeros(ACQ_dim)
-    if ACQ_dim == 3:
-        dimSizes[1:] = get_value(meth, 'PVM_EncMatrix')[1:]
-    else:
-        dimSizes[1] = get_value(meth, 'PVM_EncMatrix')[1]
-    Npe=np.prod(dimSizes[1:])
-    dimSizes[0] = int(Nreadout/2)   
+    ACQ_phase_factor = get_value(meth,'PVM_RareFactor') if 'rare' in get_value(meth,'Method').lower() else get_value(acqp,'ACQ_phase_factor')
 
-    # [num_readout, channel, scan_size] -> [channel, scan_size, num_readout]
-    results = results.transpose((1,2,0))
-    
-    results = results.reshape(
-        int(NC), 
-        int(dimSizes[0]), 
-        int(ACQ_phase_factor), 
-        int(NI), 
-        int(Npe/ACQ_phase_factor), 
-        int(NR), order='F')
-    
-    # reorder to [scansize, ACQ_phase_factor, numDataHighDim/ACQ_phase_factor, NC, NI, NR]
-    results = np.transpose(results, (1, 2, 4, 0, 3, 5)) 
-
-    results =  results.reshape( 
-        int(dimSizes[0]), 
-        int(Npe), 
-        int(NC), 
-        int(NI), 
-        int(NR), order='F') 
-    
-    frame = np.zeros_like(results)
-    frame[:,:,:,ACQ_obj_order,:] = results 
-        
-    return frame
-
-
-def convertFrameToCKData(frame, acqp, meth):
-    """Frame to unprocessed KSPACE
-
-    Parameters
-    ----------
-    frame : np.array with size [num_readouts, channel, scan_size]
-
-    acqp : dict (brkraw Parameter structure)
-
-    meth : dict (brkraw Parameter structure)
-
-    Returns
-    -------
-    data : np.array with size 
-        [scansize, ACQ_phase_factor, numDataHighDim/ACQ_phase_factor, NC, NI, NR]
-        for simplified understanding of the data structure
-        [x,y,z,_,n_channel,NI,NR]
-    """
-    # Metadata 
-    NI = get_value(acqp, 'NI')
-    NR = get_value(acqp, 'NR')
-    
-    ACQ_dim             = get_value(acqp, 'ACQ_dim')
-    NC= frame.shape[2]
-    
-    acqSizes = np.zeros(ACQ_dim)   
-    scanSize = get_value(acqp, 'ACQ_jobs')[0][0]
-    if scanSize == 0:
-        scanSize = get_value(acqp,'ACQ_size')[0]
-        
-    acqSizes[0] = scanSize
-    ACQ_size = acqSizes
-    
-    isSpatialDim = [i == 'Spatial' for i in get_value(acqp, 'ACQ_dim_desc')]
-    spatialDims = sum(isSpatialDim)
-    
-    if isSpatialDim[0]:
-        if spatialDims == 3:
-            acqSizes[1:] = get_value(meth, 'PVM_EncMatrix')[1:]
-        elif spatialDims == 2:
-            acqSizes[1]  = get_value(meth, 'PVM_EncMatrix')[1]
-    numDataHighDim=np.prod(acqSizes[1:])
-    
-    if np.iscomplexobj(frame):
-        scanSize = int(acqSizes[0]/2)
-    else:
-        scanSize = acqSizes[0]
-    
-    if ACQ_dim==3:
-        PVM_EncSteps2=get_value(meth, 'PVM_EncSteps2')
-        assert PVM_EncSteps2 != None
-           
+    # DATA SIZES
     PVM_Matrix = get_value(meth, 'PVM_Matrix')
+    kSize = np.round(np.array(get_value(meth, 'PVM_AntiAlias'))*np.array(PVM_Matrix))
+    reduceZf = 2*np.floor( (kSize - kSize/np.array(get_value(meth, 'PVM_EncZf')[0]))/2 )
+    kSize = kSize - reduceZf
+    readStart = int(kSize[0]-Nreadout)
+    # Phase Encoding
+    PVM_EncMatrix = get_value(meth,'PVM_EncMatrix')
+    NPE = np.prod(PVM_EncMatrix[1:])
+    PVM_EncSteps2 = [0]
+    if ACQ_dim == 3:
+        PVM_EncSteps2 = get_value(meth, 'PVM_EncSteps2')
+        PVM_EncSteps2 = (PVM_EncSteps2 - np.min(PVM_EncSteps2)).astype(int)
     PVM_EncSteps1 = get_value(meth,'PVM_EncSteps1')
-    
-    PVM_AntiAlias = get_value(meth, 'PVM_AntiAlias')
-    if PVM_AntiAlias == None:
-        # No anti-aliasing available.
-        PVM_AntiAlias = np.ones((ACQ_dim))
+    PVM_EncSteps1 = (PVM_EncSteps1 - np.min(PVM_EncSteps1)).astype(int)
      
-    PVM_EncZf=get_value(meth, 'PVM_EncZf')
-    
-    if PVM_EncZf == None:
-        # No zero-filling/interpolation available.
-        PVM_EncZf = np.ones((ACQ_dim))
-    
-    # Start Resort Process
-    frameData = frame.copy()
-    
-    # MGE with alternating k-space readout: Reverse every second scan. 
+    # Resorting
+    raw = raw.reshape((NR,int(NPE/ACQ_phase_factor),NI,ACQ_phase_factor,NC,Nreadout)).transpose(0,2,4,1,3,5)
+    raw = raw.reshape((NR,NI,NC,NPE,Nreadout)).transpose((4,3,2,1,0))
     if get_value(meth, 'EchoAcqMode') != None and get_value(meth,'EchoAcqMode') == 'allEchoes':
-        frameData[:,:,:,1::2,:] = np.flipud(frame[:,:,:,1::2,:])
-    
-    # Calculate size of Cartesian k-space
-    # Step 1: Anti-Aliasing
-    ckSize = np.round(np.array(PVM_AntiAlias)*np.array(PVM_Matrix))
-    # Step 2: Interpolation 
+        raw[:,:,:,1::2,:] = raw[::-1,:,:,1::2,:]
+    raw = raw.reshape(Nreadout, int(PVM_EncMatrix[1]), int(PVM_EncMatrix[2]) if ACQ_dim == 3 else 1, 1, NC, NI, NR, order = 'F')
+    kdata = np.zeros([int(kSize[0]), int(kSize[1]),int(kSize[2]) if ACQ_dim == 3 else 1, 1, NC, NI, NR], dtype=complex)
+    kdata[readStart:,PVM_EncSteps1,:,:,:,:,:] = raw[:,:,PVM_EncSteps2,:,:,:,:]
+    kdata = kdata[:,:,:,:,:,ACQ_obj_order,:]
 
-    reduceZf = 2*np.floor( (ckSize - ckSize/np.array(PVM_EncZf))/2 )
-    ckSize = ckSize - reduceZf
-    
-    # index of central k-space point (+1 for 1-based indexing in MATLAB) 
-    ckCenterIndex = np.floor(ckSize/2 + 0.25) + 1
-    readStartIndex = int(ckSize[0]-scanSize + 1)
+    return kdata
 
-    # Reshape & store based on dimension
-    if ACQ_dim == 1:
-        frameData = np.reshape(frameData,(scanSize, 1, 1, 1, NC, NI, NR) , order='F')
-        data = np.zeros((ckSize[0], 1, 1, 1, NC, NI, NR), dtype=complex)
-        data[readStartIndex-1:,0,0,0,:,:,:] = frameData
-
-    elif ACQ_dim == 2: 
-        frameData=np.reshape(frameData,(scanSize, int(ACQ_size[1]), 1, 1, NC, NI, NR) , order='F')
-        data=np.zeros([int(ckSize[0]), int(ckSize[1]), 1, 1, NC, NI, NR], dtype=complex)
-        encSteps1indices = (PVM_EncSteps1 + ckCenterIndex[1] - 1).astype(int)
-        data[readStartIndex-1:,encSteps1indices,0,0,:,:,:] = frameData.reshape(data[readStartIndex-1:,encSteps1indices,0,0,:,:,:].shape, order='F')               
-    
-    elif ACQ_dim == 3:
-        frameData = np.reshape(frameData,(scanSize, int(ACQ_size[1]), int(ACQ_size[2]), 1, NC, NI, NR) , order='F')
-        data=np.zeros([int(ckSize[0]), int(ckSize[1]), int(ckSize[2]), 1, NC, NI, NR], dtype=complex)
-        encSteps1indices = (PVM_EncSteps1 + ckCenterIndex[1] - 1).astype(int)
-        encSteps2indices = (PVM_EncSteps2 + ckCenterIndex[2] - 1).astype(int)
-        
-        data[readStartIndex-1:,list(encSteps1indices),:,:,:,:,:] = frameData[:,:,list(encSteps2indices),:,:,:,:]
-    
-    else:
-        raise 'Unknown ACQ_dim with useMethod'
-    
-    return data
-
-
-def brkraw_Reco(kdata, reco, meth, recoparams = 'default'):
+def brkrawReco(kdata, reco, meth, recoparams = 'default'):
     reco_result = kdata.copy()
         
     if recoparams == 'default':
-        recoparams = ['phase_rotate', 'zero_filling', 
-                     'FT', 'phase_corr_pi']
-    
+        recoparams = ['phase_rotate', 'zero_filling']    
     # DIMS
-    N1, N2, N3, N4, N5, N6, N7 = kdata.shape
+    _, _, _, _, N5, N6, N7 = kdata.shape
 
-    dims = kdata.shape[0:4]
     for i in range(4):
-        if dims[i]>1:
+        if kdata.shape[0:4][i]>1:
             dimnumber = (i+1)
     
     signal_position=np.ones(shape=(dimnumber,1))*0.5
     
-    map_index= np.reshape( np.arange(0,kdata.shape[5]*kdata.shape[6]), (kdata.shape[6], kdata.shape[5]) ).flatten()
-    
     # --- START RECONSTRUCTION ---
-                  
     if 'phase_rotate' in recoparams:
+        map_index= np.reshape( np.arange(0,kdata.shape[5]*kdata.shape[6]), (kdata.shape[6], kdata.shape[5]) ).flatten()
         for NR in range(N7):
             for NI in range(N6):
                 for channel in range(N5):
@@ -395,7 +240,6 @@ def brkraw_Reco(kdata, reco, meth, recoparams = 'default'):
     reco_result = np.fft.ifftn(reco_result, axes=(0,1,2,3))
     reco_result *= np.tile(reco_phase_corr_pi(reco_result)[:,:,:,:,np.newaxis,np.newaxis,np.newaxis],
                                                   [1,1,1,1,N5,N6,N7])
-
     # --- End of RECONSTRUCTION --- 
                             
     return reco_result

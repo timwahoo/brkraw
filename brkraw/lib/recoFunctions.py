@@ -72,8 +72,6 @@ def reco_phase_rotate(frame, Reco, actual_framenumber):
         RECO_rotate =  get_value(Reco,'RECO_rotate')[:,0]
     
     if isinstance( get_value(Reco,'RECO_ft_mode'), list):
-        if any(x != get_value(Reco,'RECO_ft_mode')[0] for x in get_value(Reco,'RECO_ft_mode')):
-            raise ValueError('It''s not allowed to use different transfomations on different Dimensions: ' + Reco['RECO_ft_mode'])
         RECO_ft_mode = get_value(Reco,'RECO_ft_mode')[0]
     else:
         RECO_ft_mode = get_value(Reco,'RECO_ft_mode')
