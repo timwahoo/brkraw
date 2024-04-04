@@ -49,14 +49,14 @@ def main():
     nii.add_argument("-p", "--position", help="override position information in case the original setting was not properly input." + \
                      "the position variable can be defiend as <BodyPart>_<Side>, " + \
                      "available BodyParts are (Head, Foot, Tail) and sides are (Supine, Prone, Left, Right). (e.g. Head_Supine)", type=str, default=None)
-    
-    nii.add_argument("-f", "--formatting", help="FID processing methods" + \
-                    "available processing are (CKdata, image)", type=str, default='image')
+    nii.add_argument("-f", "--formatting", help="FID processing methods " + \
+                    "available processing are (kdata, image)", type=str, default='image')
 
     nii.add_argument("--ignore-slope", help='remove slope value from header', action='store_true')
     nii.add_argument("--ignore-offset", help='remove offset value from header', action='store_true')
     nii.add_argument("--ignore-rescale", help='remove slope and offset values from header', action='store_true')
     nii.add_argument("--ignore-localizer", help='ignore the scan if it is localizer', action='store_true', default=True)    
+    nii.add_argument("--phase", help='only save phase data', action='store_true', default=False)
 
     args = parser.parse_args()
 
@@ -66,8 +66,8 @@ def main():
         reco_id  = args.recoid
         process  = args.formatting
         study    = BrukerLoader(path)
-        slope, offset = set_rescale(args)
         ignore_localizer = args.ignore_localizer
+        phase_only = args.phase
         
         if study.is_pvdataset:
             if args.output:
@@ -85,7 +85,7 @@ def main():
                     print('Identified a localizer, the file will not be converted: ScanID:{}'.format(str(scan_id)))
                 else:
                     try:
-                        recon2nifti(study, scan_id, reco_id, output, scanname, process) 
+                        recon2nifti(study, scan_id, reco_id, output, scanname, process, only_phase=phase_only) 
                     except:
                         print('Conversion failed: ScanID:{}, RecoID:{}'.format(str(scan_id), str(reco_id)))
             else:
@@ -97,13 +97,13 @@ def main():
                         print('Identified a localizer, the file will not be converted: ScanID:{}'.format(str(scan_id)))
                     else:
                         try:
-                            recon2nifti(study, scan_id, reco_id, output, scanname, process)   
+                            recon2nifti(study, scan_id, reco_id, output, scanname, process, only_phase=phase_only)   
                         except Exception as e:
                             print('Conversion failed: ScanID:{}'.format(str(scan_id)))
         else:
             print('{} is not PvDataset.'.format(path))
 
-def recon2nifti(pvobj, scan_id, reco_id, output, scanname, process):
+def recon2nifti(pvobj, scan_id, reco_id, output, scanname, process, only_phase=False):
     output_fname = '{}-{}-{}-{}'.format(output, str(scan_id), reco_id, scanname)
     visu_pars = pvobj._get_visu_pars(scan_id, 1)
     method = pvobj._method[scan_id]
@@ -136,12 +136,15 @@ def recon2nifti(pvobj, scan_id, reco_id, output, scanname, process):
         image = image.transpose(1,0,2,3,4,5,6)
 
     # [x, y, z, echo, channel, NR]
-    niiobj = nib.Nifti1Image(np.squeeze(np.abs(image)), affine)
-    niiobj = pvobj._set_nifti_header(niiobj, visu_pars, method, slope=False, offset=False)
-    niiobj.to_filename(output_fname+'-m'+'.nii.gz')
     niiobj = nib.Nifti1Image(np.squeeze(np.angle(image)), affine)
     niiobj = pvobj._set_nifti_header(niiobj, visu_pars, method, slope=False, offset=False)
     niiobj.to_filename(output_fname+'-p'+'.nii.gz')
+    if only_phase:
+        print('NifTi file is generated... [{}]'.format(output_fname))
+        return
+    niiobj = nib.Nifti1Image(np.squeeze(np.abs(image)), affine)
+    niiobj = pvobj._set_nifti_header(niiobj, visu_pars, method, slope=False, offset=False)
+    niiobj.to_filename(output_fname+'-m'+'.nii.gz')
     print('NifTi file is generated... [{}]'.format(output_fname))
     
 def is_localizer(pvobj, scan_id, reco_id):
