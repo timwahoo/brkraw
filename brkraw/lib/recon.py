@@ -190,12 +190,14 @@ def convertRawToKdata(raw, acqp, meth):
     # Resorting
     raw = raw.reshape((NR,int(NPE/ACQ_phase_factor),NI,ACQ_phase_factor,NC,Nreadout)).transpose(0,2,4,1,3,5)
     raw = raw.reshape((NR,NI,NC,NPE,Nreadout)).transpose((4,3,2,1,0))
-    raw = raw.reshape(Nreadout, int(PVM_EncMatrix[1]), int(PVM_EncMatrix[2]) if ACQ_dim == 3 else 1, 1, NC, NI, NR, order = 'F')
-    kdata = np.zeros([int(kSize[0]), int(kSize[1]),int(kSize[2]) if ACQ_dim == 3 else 1, 1, NC, NI, NR], dtype=complex)
-    kdata[readStart:,PVM_EncSteps1,:,:,:,:,:] = raw[:,:,PVM_EncSteps2,:,:,:,:]
-    kdata = kdata[:,:,:,:,:,ACQ_obj_order,:]
+    raw = raw.reshape(Nreadout, int(PVM_EncMatrix[1]), int(PVM_EncMatrix[2]) if ACQ_dim == 3 else 1, NC, NI, NR, order = 'F')
+ 
+    kdata = np.zeros([int(kSize[0]), int(kSize[1]),int(kSize[2]) if ACQ_dim == 3 else 1, NC, NI, NR], dtype=complex)
+    kdata[readStart:,PVM_EncSteps1,:,:,:,:] = raw[:,:,PVM_EncSteps2,:,:,:]
+    kdata = kdata[:,:,:,:,ACQ_obj_order,:]
     if get_value(meth, 'EchoAcqMode') != None and get_value(meth,'EchoAcqMode') == 'allEchoes':
-        kdata[:,:,:,:,:,1::2,:] = raw[::-1,:,:,:,:,1::2,:]
+        kdata[:,:,:,:,1::2,:] = raw[::-1,:,:,:,1::2,:]
+    print(kdata.shape)
     return kdata
 
 def brkrawReco(kdata, reco, meth, recoparams = 'default'):
@@ -204,7 +206,7 @@ def brkrawReco(kdata, reco, meth, recoparams = 'default'):
     if recoparams == 'default':
         recoparams = ['phase_rotate', 'zero_filling']    
     # DIMS
-    _, _, _, _, N5, N6, N7 = kdata.shape
+    _, _, _, N4, N5, N6 = kdata.shape
 
     for i in range(4):
         if kdata.shape[0:4][i]>1:
@@ -214,28 +216,28 @@ def brkrawReco(kdata, reco, meth, recoparams = 'default'):
     
     # --- START RECONSTRUCTION ---
     if 'phase_rotate' in recoparams:
-        map_index= np.reshape( np.arange(0,kdata.shape[5]*kdata.shape[6]), (kdata.shape[6], kdata.shape[5]) ).flatten()
-        for NR in range(N7):
-            for NI in range(N6):
-                for channel in range(N5):
-                    reco_result[:,:,:,:,channel,NI,NR] = phase_rotate(kdata[:,:,:,:,channel,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
+        map_index= np.reshape( np.arange(0,kdata.shape[4]*kdata.shape[5]), (kdata.shape[5], kdata.shape[4]) ).flatten()
+        for NR in range(N6):
+            for NI in range(N5):
+                for channel in range(N4):
+                    reco_result[:,:,:,channel,NI,NR] = phase_rotate(kdata[:,:,:,channel,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
         
     if 'zero_filling' in recoparams:
-        newdata_dims=[1, 1, 1, 1]
+        newdata_dims=[1, 1, 1]
         RECO_ft_size = get_value(reco,'RECO_ft_size')
         newdata_dims[0:len(RECO_ft_size)] = RECO_ft_size
-        newdata = np.zeros(shape=newdata_dims+[N5, N6, N7], dtype=np.complex128)
+        newdata = np.zeros(shape=newdata_dims+[N4, N5, N6], dtype=np.complex128)
 
-        for NR in range(N7):
-            for NI in range(N6):
-                for chan in range(N5):
-                    newdata[:,:,:,:,chan,NI,NR] = zero_filling(reco_result[:,:,:,:,chan,NI,NR], reco, signal_position).reshape(newdata[:,:,:,:,chan,NI,NR].shape)
+        for NR in range(N6):
+            for NI in range(N5):
+                for chan in range(N4):
+                    newdata[:,:,:,chan,NI,NR] = zero_filling(reco_result[:,:,:,chan,NI,NR], reco, signal_position).reshape(newdata[:,:,:,chan,NI,NR].shape)
         reco_result=newdata    
 
     # Always FT and Phase correct
-    reco_result = np.fft.ifftn(reco_result, axes=(0,1,2,3))
-    reco_result *= np.tile(phase_corr(reco_result)[:,:,:,:,np.newaxis,np.newaxis,np.newaxis],
-                                                  [1,1,1,1,N5,N6,N7])
+    reco_result = np.fft.ifftn(reco_result, axes=(0,1,2))
+    reco_result *= np.tile(phase_corr(reco_result)[:,:,:,np.newaxis,np.newaxis,np.newaxis],
+                                                  [1,1,1,N4,N5,N6])
     # --- End of RECONSTRUCTION --- 
                             
     return reco_result

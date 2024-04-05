@@ -8,12 +8,12 @@
 from .utils import get_value
 import numpy as np
     
-def phase_rotate(frame, Reco, actual_framenumber):
+def phase_rotate(frame, Reco, framenumber):
     # import variables
     RECO_rotate = get_value(Reco,'RECO_rotate')
     
-    if RECO_rotate.shape[1] > actual_framenumber:
-        RECO_rotate =  get_value(Reco,'RECO_rotate')[:, actual_framenumber]
+    if RECO_rotate.shape[1] > framenumber:
+        RECO_rotate =  get_value(Reco,'RECO_rotate')[:, framenumber]
     else:
         RECO_rotate =  get_value(Reco,'RECO_rotate')[:,0]
     
@@ -23,7 +23,7 @@ def phase_rotate(frame, Reco, actual_framenumber):
         RECO_ft_mode = get_value(Reco,'RECO_ft_mode')
 
     # calculate additional variables
-    dims = [frame.shape[0], frame.shape[1], frame.shape[2], frame.shape[3]]
+    dims = [frame.shape[0], frame.shape[1], frame.shape[2]]
 
     # start process
     phase_matrix = np.ones_like(frame)
@@ -36,17 +36,13 @@ def phase_rotate(frame, Reco, actual_framenumber):
             phase_vector = np.exp(1j*2*np.pi*(1-RECO_rotate[index])*f)
 
         if index == 0:
-            phase_matrix *= np.tile(phase_vector[:,np.newaxis,np.newaxis,np.newaxis], [1, dims[1], dims[2], dims[3]])
+            phase_matrix *= np.tile(phase_vector[:,np.newaxis,np.newaxis], [1, dims[1], dims[2]])
         elif index == 1:
-            phase_matrix *= np.tile(phase_vector[np.newaxis,:,np.newaxis,np.newaxis], [dims[0], 1, dims[2], dims[3]])
+            phase_matrix *= np.tile(phase_vector[np.newaxis,:,np.newaxis], [dims[0], 1, dims[2]])
         elif index == 2:
-            tmp = np.zeros((1,1,dims[2],1), dtype=complex)
-            tmp[0,0,:,0] = phase_vector
-            phase_matrix *= np.tile(tmp, [dims[0], dims[1], 1, dims[3]])
-        elif index == 3:
-            tmp = np.zeros((1,1,1,dims[3]), dtype=complex)
-            tmp[0,0,0,:] = phase_vector
-            phase_matrix *= np.tile(tmp, [dims[0], dims[1], dims[2], 1])
+            tmp = np.zeros((1,1,dims[2]), dtype=complex)
+            tmp[0,0,:] = phase_vector
+            phase_matrix *= np.tile(tmp, [dims[0], dims[1], 1])
 
     frame *= phase_matrix
     return frame
@@ -69,7 +65,7 @@ def zero_filling(frame, Reco, signal_position):
                 raise ValueError('RECO_ft_size has to be bigger than the size of your data-matrix')
 
         # calculate additional variables
-        dims = (frame.shape[0], frame.shape[1], frame.shape[2], frame.shape[3])
+        dims = (frame.shape[0], frame.shape[1], frame.shape[2])
 
         # start process
 
@@ -77,7 +73,7 @@ def zero_filling(frame, Reco, signal_position):
         if not_Equal:
             newframe = np.zeros(RECO_ft_size, dtype=complex)
             startpos = np.zeros(len(RECO_ft_size), dtype=int)
-            pos_ges = [None] * 4
+            pos_ges = [None] * 3
 
             for i in range(len(RECO_ft_size)):
                 diff = RECO_ft_size[i] - frame.shape[i] + 1
@@ -86,7 +82,7 @@ def zero_filling(frame, Reco, signal_position):
                     startpos[i] = RECO_ft_size[i]
                 pos_ges[i] = slice(startpos[i] - 1, startpos[i] - 1 + dims[i])
                 
-            newframe[pos_ges[0], pos_ges[1], pos_ges[2], pos_ges[3]] = frame
+            newframe[pos_ges[0], pos_ges[1], pos_ges[2]] = frame
         else:
             newframe = frame
 
@@ -100,11 +96,11 @@ def zero_filling(frame, Reco, signal_position):
 
 def phase_corr(frame):
     # start process
-    checkerboard = np.ones(shape=frame.shape[:4])
+    checkerboard = np.ones(shape=frame.shape[:3])
     # Use NumPy broadcasting to alternate the signs
-    checkerboard[::2,::2,::2,0] = -1
-    checkerboard[1::2,1::2,::2,0] = -1
-    checkerboard[::2,1::2,1::2,0] = -1
-    checkerboard[1::2,::2,1::2,0] = -1
+    checkerboard[::2,::2,::2] = -1
+    checkerboard[1::2,1::2,::2] = -1
+    checkerboard[::2,1::2,1::2] = -1
+    checkerboard[1::2,::2,1::2] = -1
     checkerboard * -1
     return checkerboard
