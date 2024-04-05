@@ -8,7 +8,7 @@ Created on Sat Jan  20 10:06:38 2024
 
 """
 
-from .utils import get_value, set_value
+from .utils import get_value
 from .recoFunctions import *
 import numpy as np
 from copy import deepcopy
@@ -27,15 +27,12 @@ def recon(fid_binary, acqp, meth, reco, process = 'image', recoparams = 'default
 
     reco : dict (brkraw Parameter structure)
 
-    process: 'raw', 'frame', 'CKdata', 'image'
+    process: 'raw','kdata','image'
 
     recoparams: 'default' or list()
-        List Options: ['quadrature', 'phase_rotate', 'zero_filling', 'FT', 'phase_corr_pi', 
-                        'cutoff',  'scale_phase_channels', 'sumOfSquares', 'transposition']
         
         'default':
-            recoparams = ['quadrature', 'phase_rotate', 'zero_filling', 
-                        'FT', 'phase_corr_pi']
+            recoparams = ['quadrature', 'phase_rotate', 'zero_filling']
 
     Returns
     -------
@@ -72,7 +69,7 @@ def recon(fid_binary, acqp, meth, reco, process = 'image', recoparams = 'default
         if process == 'kdata':
             return output
 
-        output = brkrawReco(output, deepcopy(reco), meth, recoparams = recoparams)
+        output = brkrawReco(output, reco, meth, recoparams = recoparams)
     
     else:
         print("Warning: SEQUENCE PROTOCOL {} NOT SUPPORTED...".format(get_value(acqp, 'ACQ_scan_name' )))
@@ -193,13 +190,12 @@ def convertRawToKdata(raw, acqp, meth):
     # Resorting
     raw = raw.reshape((NR,int(NPE/ACQ_phase_factor),NI,ACQ_phase_factor,NC,Nreadout)).transpose(0,2,4,1,3,5)
     raw = raw.reshape((NR,NI,NC,NPE,Nreadout)).transpose((4,3,2,1,0))
-    if get_value(meth, 'EchoAcqMode') != None and get_value(meth,'EchoAcqMode') == 'allEchoes':
-        raw[:,:,:,1::2,:] = raw[::-1,:,:,1::2,:]
     raw = raw.reshape(Nreadout, int(PVM_EncMatrix[1]), int(PVM_EncMatrix[2]) if ACQ_dim == 3 else 1, 1, NC, NI, NR, order = 'F')
     kdata = np.zeros([int(kSize[0]), int(kSize[1]),int(kSize[2]) if ACQ_dim == 3 else 1, 1, NC, NI, NR], dtype=complex)
     kdata[readStart:,PVM_EncSteps1,:,:,:,:,:] = raw[:,:,PVM_EncSteps2,:,:,:,:]
     kdata = kdata[:,:,:,:,:,ACQ_obj_order,:]
-
+    if get_value(meth, 'EchoAcqMode') != None and get_value(meth,'EchoAcqMode') == 'allEchoes':
+        kdata[:,:,:,:,:,1::2,:] = raw[::-1,:,:,:,:,1::2,:]
     return kdata
 
 def brkrawReco(kdata, reco, meth, recoparams = 'default'):
@@ -222,7 +218,7 @@ def brkrawReco(kdata, reco, meth, recoparams = 'default'):
         for NR in range(N7):
             for NI in range(N6):
                 for channel in range(N5):
-                    reco_result[:,:,:,:,channel,NI,NR] = reco_phase_rotate(kdata[:,:,:,:,channel,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
+                    reco_result[:,:,:,:,channel,NI,NR] = phase_rotate(kdata[:,:,:,:,channel,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
         
     if 'zero_filling' in recoparams:
         newdata_dims=[1, 1, 1, 1]
@@ -233,12 +229,12 @@ def brkrawReco(kdata, reco, meth, recoparams = 'default'):
         for NR in range(N7):
             for NI in range(N6):
                 for chan in range(N5):
-                    newdata[:,:,:,:,chan,NI,NR] = reco_zero_filling(reco_result[:,:,:,:,chan,NI,NR], reco, signal_position).reshape(newdata[:,:,:,:,chan,NI,NR].shape)
+                    newdata[:,:,:,:,chan,NI,NR] = zero_filling(reco_result[:,:,:,:,chan,NI,NR], reco, signal_position).reshape(newdata[:,:,:,:,chan,NI,NR].shape)
         reco_result=newdata    
 
     # Always FT and Phase correct
     reco_result = np.fft.ifftn(reco_result, axes=(0,1,2,3))
-    reco_result *= np.tile(reco_phase_corr_pi(reco_result)[:,:,:,:,np.newaxis,np.newaxis,np.newaxis],
+    reco_result *= np.tile(phase_corr(reco_result)[:,:,:,:,np.newaxis,np.newaxis,np.newaxis],
                                                   [1,1,1,1,N5,N6,N7])
     # --- End of RECONSTRUCTION --- 
                             

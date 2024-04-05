@@ -7,62 +7,8 @@
 
 from .utils import get_value
 import numpy as np
-
-def reco_qopts(frame, Reco):
-
-    # import variables
-    RECO_qopts = get_value(Reco, 'RECO_qopts') 
-
-    # claculate additional parameters
-    dims = [frame.shape[0], frame.shape[1], frame.shape[2], frame.shape[3]]
-
-    # check if the qneg-Matrix is necessary:
-    use_qneg = False
-    if (RECO_qopts.count('QUAD_NEGATION') + RECO_qopts.count('CONJ_AND_QNEG')) >= 1:
-        use_qneg = True
-        qneg = np.ones(frame.shape)  # Matrix containing QUAD_NEGATION multiplication matrix
-
-    # start process
-    for i in range(len(RECO_qopts)):
-        if RECO_qopts[i] == 'COMPLEX_CONJUGATE':
-            frame = np.conj(frame)
-        elif RECO_qopts[i] == 'QUAD_NEGATION':
-            if i == 0:
-                qneg = qneg * np.tile([[1, -1]], [np.ceil(dims[0]/2), dims[1], dims[2], dims[3]])
-            elif i == 1:
-                qneg = qneg * np.tile([[1], [-1]], [dims[0], np.ceil(dims[1]/2), dims[2], dims[3]])
-            elif i == 2:
-                tmp = np.zeros([1, 1, dims[2], 2])
-                tmp[0, 0, :, :] = [[1, -1]]
-                qneg = qneg * np.tile(tmp, [dims[0], dims[1], np.ceil(dims[2]/2), dims[3]])
-            elif i == 3:
-                tmp = np.zeros([1, 1, 1, dims[3], 2])
-                tmp[0, 0, 0, :, :] = [[1, -1]]
-                qneg = qneg * np.tile(tmp, [dims[0], dims[1], dims[2], np.ceil(dims[3]/2)])
-        elif RECO_qopts[i] == 'CONJ_AND_QNEG':
-            frame = np.conj(frame)
-            if i == 0:
-                qneg = qneg * np.tile([[1, -1]], [np.ceil(dims[0]/2), dims[1], dims[2], dims[3]])
-            elif i == 1:
-                qneg = qneg * np.tile([[1], [-1]], [dims[0], np.ceil(dims[1]/2), dims[2], dims[3]])
-            elif i == 2:
-                tmp = np.zeros([1, 1, dims[2], 2])
-                tmp[0, 0, :, :] = [[1, -1]]
-                qneg = qneg * np.tile(tmp, [dims[0], dims[1], np.ceil(dims[2]/2), dims[3]])
-            elif i == 3:
-                tmp = np.zeros([1, 1, 1, dims[3], 2])
-                tmp[0, 0, 0, :, :] = [[1, -1]]
-                qneg = qneg * np.tile(tmp, [dims[0], dims[1], dims[2], np.ceil(dims[3]/2)])
     
-    if use_qneg:
-        if qneg.shape != frame.shape:
-            qneg = qneg[0:dims[0], 0:dims[1], 0:dims[2], 0:dims[3]]
-        frame = frame * qneg
-    
-    return frame
-
-    
-def reco_phase_rotate(frame, Reco, actual_framenumber):
+def phase_rotate(frame, Reco, actual_framenumber):
     # import variables
     RECO_rotate = get_value(Reco,'RECO_rotate')
     
@@ -106,7 +52,7 @@ def reco_phase_rotate(frame, Reco, actual_framenumber):
     return frame
 
 
-def reco_zero_filling(frame, Reco, signal_position):
+def zero_filling(frame, Reco, signal_position):
 
     # Check if Reco.RECO_ft_size is not equal to size(frame)
     not_Equal = any([(i != j) for i,j in zip(frame.shape,get_value(Reco, 'RECO_ft_size'))])
@@ -152,7 +98,7 @@ def reco_zero_filling(frame, Reco, signal_position):
     return newframe
 
 
-def reco_phase_corr_pi(frame):
+def phase_corr(frame):
     # start process
     checkerboard = np.ones(shape=frame.shape[:4])
     # Use NumPy broadcasting to alternate the signs
