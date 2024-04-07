@@ -197,7 +197,6 @@ def convertRawToKdata(raw, acqp, meth):
     kdata = kdata[:,:,:,:,ACQ_obj_order,:]
     if get_value(meth, 'EchoAcqMode') != None and get_value(meth,'EchoAcqMode') == 'allEchoes':
         kdata[:,:,:,:,1::2,:] = raw[::-1,:,:,:,1::2,:]
-    print(kdata.shape)
     return kdata
 
 def brkrawReco(kdata, reco, meth, recoparams = 'default'):

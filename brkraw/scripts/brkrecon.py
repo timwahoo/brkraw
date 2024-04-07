@@ -117,7 +117,7 @@ def recon2nifti(pvobj, scan_id, reco_id, output, scanname, process, only_phase=F
         return
     
     #[x,y,z,_,n_channel,NI,NR] 
-    image = image.transpose(0,1,2,5,4,6,3)
+    image = image.transpose(0,1,2,4,3,5)
     # MultiSlice Acq Correction
     if '360' in acqp._parameters['ACQ_sw_version']:
         if acqp._parameters['ACQ_dim'] == 2 and acqp._parameters['NSLICES'] > 1:
@@ -125,7 +125,7 @@ def recon2nifti(pvobj, scan_id, reco_id, output, scanname, process, only_phase=F
             new_shape[2] = acqp._parameters['NSLICES']
             new_shape[3] = int(new_shape[3]/acqp._parameters['NSLICES'])
             image = image.reshape(new_shape)
-            image = image.transpose(1,0,2,3,4,5,6)
+            image = image.transpose(1,0,2,3,4,5)
 
     else:
         if acqp._parameters['ACQ_dim'] == 2 and acqp._parameters['NSLICES'] > 1:
@@ -133,7 +133,7 @@ def recon2nifti(pvobj, scan_id, reco_id, output, scanname, process, only_phase=F
             new_shape[2] = acqp._parameters['NSLICES']
             new_shape[3] = int(new_shape[3]/acqp._parameters['NSLICES'])
             image = image.reshape(new_shape)
-        image = image.transpose(1,0,2,3,4,5,6)
+        image = image.transpose(1,0,2,3,4,5)
 
     # [x, y, z, echo, channel, NR]
     niiobj = nib.Nifti1Image(np.squeeze(np.angle(image)), affine)
