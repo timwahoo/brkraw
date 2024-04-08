@@ -174,8 +174,9 @@ def convertRawToKdata(raw, acqp, meth):
     # DATA SIZES
     PVM_Matrix = get_value(meth, 'PVM_Matrix')
     kSize = np.round(np.array(get_value(meth, 'PVM_AntiAlias'))*np.array(PVM_Matrix))
-    reduceZf = 2*np.floor( (kSize - kSize/np.array(get_value(meth, 'PVM_EncZf')[0]))/2 )
+    reduceZf = 2*np.floor( (kSize - kSize/np.array(get_value(meth, 'PVM_EncZf')))/2 )
     kSize = kSize - reduceZf
+    center = np.floor(kSize/2)
     readStart = int(kSize[0]-Nreadout)
     # Phase Encoding
     PVM_EncMatrix = get_value(meth,'PVM_EncMatrix')
@@ -183,10 +184,13 @@ def convertRawToKdata(raw, acqp, meth):
     PVM_EncSteps2 = [0]
     if ACQ_dim == 3:
         PVM_EncSteps2 = get_value(meth, 'PVM_EncSteps2')
-        PVM_EncSteps2 = (PVM_EncSteps2 - np.min(PVM_EncSteps2)).astype(int)
+        PVM_EncSteps2 = (PVM_EncSteps2 - center[2]).astype(int)
     PVM_EncSteps1 = get_value(meth,'PVM_EncSteps1')
-    PVM_EncSteps1 = (PVM_EncSteps1 - np.min(PVM_EncSteps1)).astype(int)
-     
+    PVM_EncSteps1 = (PVM_EncSteps1 - center[1]).astype(int)
+    
+    print(PVM_EncSteps1)
+    print(PVM_EncSteps2)
+    print(center)
     # Resorting
     raw = raw.reshape((NR,int(NPE/ACQ_phase_factor),NI,ACQ_phase_factor,NC,Nreadout)).transpose(0,2,4,1,3,5)
     raw = raw.reshape((NR,NI,NC,NPE,Nreadout)).transpose((4,3,2,1,0))
