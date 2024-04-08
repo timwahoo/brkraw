@@ -32,7 +32,7 @@ def phase_rotate(frame, Reco, framenumber):
 
         if RECO_ft_mode in ['NO_FT']:
             phase_vector = np.ones_like(f)
-        elif RECO_ft_mode in ['COMPLEX_FT']:
+        else:
             phase_vector = np.exp(1j*2*np.pi*(1-RECO_rotate[index])*f)
 
         if index == 0:
