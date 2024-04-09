@@ -215,24 +215,23 @@ def brkrawReco(kdata, reco, meth, recoparams = 'default'):
     signal_position=np.ones(shape=(dimnumber,1))*0.5
     
     # --- START RECONSTRUCTION ---
-    if 'phase_rotate' in recoparams:
-        map_index= np.reshape( np.arange(0,kdata.shape[4]*kdata.shape[5]), (kdata.shape[5], kdata.shape[4]) ).flatten()
-        for NR in range(N6):
-            for NI in range(N5):
-                for channel in range(N4):
-                    reco_result[:,:,:,channel,NI,NR] = phase_rotate(kdata[:,:,:,channel,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
-        
-    if 'zero_filling' in recoparams:
-        newdata_dims=[1, 1, 1]
-        RECO_ft_size = get_value(reco,'RECO_ft_size')
-        newdata_dims[0:len(RECO_ft_size)] = RECO_ft_size
-        newdata = np.zeros(shape=newdata_dims+[N4, N5, N6], dtype=np.complex128)
-
-        for NR in range(N6):
-            for NI in range(N5):
-                for chan in range(N4):
-                    newdata[:,:,:,chan,NI,NR] = zero_filling(reco_result[:,:,:,chan,NI,NR], reco, signal_position).reshape(newdata[:,:,:,chan,NI,NR].shape)
-        reco_result=newdata    
+    # Object Rotation
+    map_index= np.reshape( np.arange(0,kdata.shape[4]*kdata.shape[5]), (kdata.shape[5], kdata.shape[4]) ).flatten()
+    for NR in range(N6):
+        for NI in range(N5):
+            for channel in range(N4):
+                reco_result[:,:,:,channel,NI,NR] = phase_rotate(kdata[:,:,:,channel,NI,NR], reco, map_index[(NI+1)*(NR+1)-1])
+    
+    # ZeroFill
+    newdata_dims=[1, 1, 1]
+    RECO_ft_size = get_value(reco,'RECO_ft_size')
+    newdata_dims[0:len(RECO_ft_size)] = RECO_ft_size
+    newdata = np.zeros(shape=newdata_dims+[N4, N5, N6], dtype=np.complex128)
+    for NR in range(N6):
+        for NI in range(N5):
+            for chan in range(N4):
+                newdata[:,:,:,chan,NI,NR] = zero_filling(reco_result[:,:,:,chan,NI,NR], reco, signal_position).reshape(newdata[:,:,:,chan,NI,NR].shape)
+    reco_result=newdata    
 
     # Always FT and Phase correct
     reco_result = np.fft.ifftn(reco_result, axes=(0,1,2))
