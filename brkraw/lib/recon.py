@@ -192,13 +192,13 @@ def convertRawToKdata(raw, acqp, meth):
     raw = raw.reshape((NR,int(NPE/ACQ_phase_factor),NI,ACQ_phase_factor,NC,Nreadout)).transpose(0,2,4,1,3,5)
     raw = raw.reshape((NR,NI,NC,NPE,Nreadout)).transpose((4,3,2,1,0))
     raw = raw.reshape(Nreadout, int(PVM_EncMatrix[1]), int(PVM_EncMatrix[2]) if ACQ_dim == 3 else 1, NC, NI, NR, order = 'F')
- 
-    kdata = np.zeros([int(kSize[0]), int(kSize[1]),int(kSize[2]) if ACQ_dim == 3 else 1, NC, NI, NR], dtype=complex)
-    kdata[readStart:,PVM_EncSteps1,:,:,:,:] = raw[:,:,PVM_EncSteps2,:,:,:]
-    kdata = kdata[:,:,:,:,ACQ_obj_order,:]
-    if get_value(meth, 'EchoAcqMode') != None and get_value(meth,'EchoAcqMode') == 'allEchoes':
-        kdata[:,:,:,:,1::2,:] = kdata[::-1,:,:,:,1::2,:]
-    return kdata
+    temp = np.zeros([int(kSize[0]), int(kSize[1]),int(kSize[2]) if ACQ_dim == 3 else 1, NC, NI, NR], dtype=complex)
+    temp[readStart:,PVM_EncSteps1,:,:,:,:] = raw[:,:,PVM_EncSteps2,:,:,:]
+    raw = np.zeros_like(temp)
+    raw[:,:,:,:,ACQ_obj_order,:] = temp
+    if get_value(meth,'EchoAcqMode') == 'allEchoes':
+        raw[:,:,:,:,1::2,:] = raw[::-1,:,:,:,1::2,:]
+    return raw
 
 def brkrawReco(kdata, reco, meth, recoparams = 'default'):
     reco_result = kdata.copy()
