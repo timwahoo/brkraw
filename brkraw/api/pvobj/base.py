@@ -214,7 +214,7 @@ class BaseMethods(BaseBufferHandler):
         
         if file := [f for f in self.contents['files'] if (f == key or f.replace('.', '_') == key)]:
             fileobj = self._open_as_fileobject(file.pop())
-            if self._is_binary(fileobj):
+            if self._is_binary(fileobj) or 'b0' in fileobj.name: # TIM 07222024 need to edit _is_binary to catch 
                 return fileobj
             string_list = fileobj.read().decode('UTF-8').split('\n')
             fileobj.close()
