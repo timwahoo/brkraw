@@ -17,7 +17,7 @@ Created on Sat Jan  20 10:06:38 2024
 """
 
 from .recoFunctions import phase_rotate, phase_corr, zero_filling
-from ..api.data import Scan
+from ..api.pvobj.pvscan import PvScan
 import numpy as np
 import warnings
 
@@ -26,7 +26,7 @@ SUPPORTED_PROTOCOLS = ['rare','localizer' ,'gre', 'msme',
 
 def reconstruction(scanobj,process='image', **kwargs):
     # Ensure Scans are Image Based
-    acqp = scanobj.pvobj.acqp
+    acqp = scanobj.acqp
     ACQ_dim_desc = [acqp.get('ACQ_dim_desc')] if isinstance(acqp.get('ACQ_dim_desc'), str) else acqp.get('ACQ_dim_desc')
     if 'Spectroscopic' in ACQ_dim_desc:
         warnings.warn('Scan is spectroscopic')
@@ -41,8 +41,7 @@ def reconstruction(scanobj,process='image', **kwargs):
     return recoObj.reconstruct(rms=kwargs['rms'] if 'rms' in kwargs.keys() else True) 
 
 class Reconstruction:
-    def __init__(self, scanobj:'Scan', reco_id:'int'=1) -> None:
-        pvscan = scanobj.pvobj
+    def __init__(self, pvscan:'Scan', reco_id:'int'=1) -> None:
         self.acqp       = pvscan.acqp
         self.method     = pvscan.method
         self.fid        = pvscan.get_fid()
@@ -51,10 +50,12 @@ class Reconstruction:
         self.NR         = self.acqp['NR']
         self.NRecs      = 1
         self.reco_id    = reco_id
-        self.info       = scanobj.get_info(self.reco_id)
-        self.protocol   = self.info.protocol
+        self.protocol   = self.acqp['ACQ_protocol_name']
+        print(self.protocol)
+        #self.info       = scanobj.get_info(self.reco_id)
+        #self.protocol   = self.info.protocol
         self.reco       = pvscan.get_reco(self.reco_id).reco        
-        self.supported_protocol = any([True for i in SUPPORTED_PROTOCOLS if i in self.protocol['protocol_name'].lower()])
+        self.supported_protocol = any([True for i in SUPPORTED_PROTOCOLS if i in self.protocol.lower()])
     
     # 1) Convert Buffer to a np array
     def sort_fid(self):
@@ -82,7 +83,7 @@ class Reconstruction:
         # Get FID FROM buffer
         fid = np.frombuffer(self.fid.read(), DT_CODE)
         # Check Version and Sort fid data
-        if '360' in self.protocol['sw_version']:
+        if '360' in self.acqp['ACQ_sw_version']:
             # METAdata for 360
             self.NRecs = self.acqp['ACQ_ReceiverSelectPerChan'].count('Yes')
             scanSize = self.acqp['ACQ_jobs'][0][0]
